@@ -1,0 +1,8 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+- Luôn chạy "conda activate elastic-agent" trước khi chạy terminal
+- Đánh dấu task đã xong trong plan để track tiến độ
+- Để code được chính xác, hãy tham khảo tài liệu
