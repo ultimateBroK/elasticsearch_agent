@@ -115,15 +115,98 @@ bun dev
 
 ```mermaid
 graph TB
-    User["👤 User"] --> Frontend["🎨 Next.js Frontend"]
-    Frontend --> API["⚡ FastAPI Backend"]
-    API --> Agent["🧠 LangGraph Agent"]
-    Agent --> Gemini["🤖 Google Gemini AI"]
-    Agent --> ES["🔍 Elasticsearch"]
-    Agent --> Redis["💾 Redis Cache"]
-    Agent --> Vector["🔍 ChromaDB Vector Store"]
-    Frontend -.->|WebSocket| API
+    %% Frontend Layer
+    User["👤 User"] --> Chat["💬 Chat Interface"]
+    Chat --> Store["🏪 Zustand Store"]
+    Chat --> WS["🔌 WebSocket Hook"]
+    Chat --> API["📡 REST API Client"]
+    
+    %% Communication Protocols
+    WS -.->|Real-time| WSHandler["🔄 WebSocket Handler"]
+    API -.->|HTTP/REST| Routes["🛣️ API Routes"]
+    
+    %% Backend Entry Points
+    WSHandler --> DI["💉 Dependency Injection"]
+    Routes --> DI
+    
+    %% Core Services (Managed by DI)
+    DI --> Agent["🧠 LangGraph Agent"]
+    DI --> ES_Service["🔍 Elasticsearch Service"]
+    DI --> Gemini_Service["🤖 Gemini Service"]
+    DI --> Redis_Service["💾 Redis Service"]
+    DI --> Vector_Service["🧮 Vector DB Service"]
+    
+    %% Agent Workflow (LangGraph State Machine)
+    Agent --> Workflow["⚙️ LangGraph Workflow"]
+    Workflow --> GetIndices["📋 Get Indices"]
+    GetIndices --> AnalyzeIntent["🎯 Analyze Intent"]
+    AnalyzeIntent --> GenerateQuery["📝 Generate Query"]
+    GenerateQuery --> ExecuteQuery["⚡ Execute Query"]
+    ExecuteQuery --> GenerateResponse["📤 Generate Response"]
+    
+    %% External Services Integration
+    ES_Service --> ES["🗄️ Elasticsearch Cluster"]
+    Gemini_Service --> Gemini["🤖 Google Gemini API"]
+    Redis_Service --> Redis["💾 Redis Cache"]
+    Vector_Service --> Chroma["🧮 ChromaDB Vector Store"]
+    
+    %% Data Flow within Agent
+    AnalyzeIntent -.->|"Semantic Search"| Vector_Service
+    GenerateQuery -.->|"Cache Check"| Redis_Service
+    AnalyzeIntent -.->|"Intent Analysis"| Gemini_Service
+    GenerateQuery -.->|"Query Generation"| Gemini_Service
+    ExecuteQuery -.->|"Data Retrieval"| ES_Service
+    GenerateResponse -.->|"Response Generation"| Gemini_Service
+    
+    %% Infrastructure
+    ES --> Docker1["🐳 Docker Container"]
+    Redis --> Docker2["🐳 Docker Container"]
+    
+    %% Styling
+    classDef frontend fill:#e1f5fe
+    classDef backend fill:#f3e5f5
+    classDef agent fill:#e8f5e8
+    classDef external fill:#fff3e0
+    classDef infrastructure fill:#fafafa
+    
+    class User,Chat,Store,WS,API frontend
+    class WSHandler,Routes,DI,ES_Service,Gemini_Service,Redis_Service,Vector_Service backend
+    class Agent,Workflow,GetIndices,AnalyzeIntent,GenerateQuery,ExecuteQuery,GenerateResponse agent
+    class ES,Gemini,Redis,Chroma external
+    class Docker1,Docker2 infrastructure
 ```
+
+### 🔄 **Detailed Flow Explanation**
+
+#### **Frontend Architecture**
+- **Chat Interface**: React component managing user interactions
+- **Zustand Store**: Client-side state management for messages, sessions, and connection status
+- **WebSocket Hook**: Real-time bidirectional communication with auto-reconnection
+- **REST API Client**: Fallback HTTP communication with error handling
+
+#### **Backend Architecture**
+- **Dependency Injection**: Centralized service management and health monitoring
+- **WebSocket Handler**: Real-time message processing with typing indicators
+- **API Routes**: RESTful endpoints for HTTP-based operations
+- **Service Layer**: Abstracted external service integrations
+
+#### **LangGraph Agent Workflow**
+1. **Get Indices**: Retrieve available Elasticsearch indices
+2. **Analyze Intent**: 
+   - Use ChromaDB for semantic similarity search
+   - Leverage conversation context from Redis
+   - Analyze user intent with Gemini AI
+3. **Generate Query**: 
+   - Check Redis cache for similar queries
+   - Generate optimized Elasticsearch DSL with Gemini
+4. **Execute Query**: Run query against Elasticsearch cluster
+5. **Generate Response**: Create user-friendly response with optional chart configuration
+
+#### **Service Integration**
+- **Elasticsearch Service**: Direct cluster communication with connection pooling
+- **Gemini Service**: AI-powered intent analysis and query generation
+- **Redis Service**: Query caching and session management
+- **Vector DB Service**: Semantic search and conversation memory using ChromaDB
 
 ### 🔧 Tech Stack
 
