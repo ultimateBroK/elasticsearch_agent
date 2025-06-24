@@ -152,11 +152,11 @@ graph TB
     K["🧮 Chroma Vector DB"] --> C
     L["🤖 Google Gemini API"] --> D
     
-    %% Styling
-    classDef input fill:#e3f2fd
-    classDef processing fill:#f3e5f5
-    classDef output fill:#e8f5e8
-    classDef memory fill:#fff3e0
+    %% Styling for both light and dark modes
+    classDef input fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#ffffff
+    classDef processing fill:#7b1fa2,stroke:#4a148c,stroke-width:2px,color:#ffffff
+    classDef output fill:#388e3c,stroke:#1b5e20,stroke-width:2px,color:#ffffff
+    classDef memory fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#ffffff
     
     class A input
     class B,C,D,E,F,G processing
@@ -214,12 +214,12 @@ graph TB
     ES --> Docker1["🐳 Docker Container"]
     Redis --> Docker2["🐳 Docker Container"]
     
-    %% Styling
-    classDef frontend fill:#e1f5fe
-    classDef backend fill:#f3e5f5
-    classDef agent fill:#e8f5e8
-    classDef external fill:#fff3e0
-    classDef infrastructure fill:#fafafa
+    %% Dark mode compatible styling
+    classDef frontend fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#ffffff
+    classDef backend fill:#7b1fa2,stroke:#4a148c,stroke-width:2px,color:#ffffff
+    classDef agent fill:#388e3c,stroke:#1b5e20,stroke-width:2px,color:#ffffff
+    classDef external fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#ffffff
+    classDef infrastructure fill:#455a64,stroke:#263238,stroke-width:2px,color:#ffffff
     
     class User,Chat,Store,WS,API,Frontend frontend
     class WSHandler,Routes,DI,ES_Service,Aggregator,Generator backend
