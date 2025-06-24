@@ -128,6 +128,44 @@ bun dev
 
 ## 🏗️ Architecture
 
+### **🎯 High-Level System Design**
+
+```mermaid
+graph TB
+    %% User Interface Layer
+    A["👤 User Chat Input"] --> B["🧠 LangGraph Agent Router"]
+    B --> C["🔍 Query Parser & Validator"]
+    B --> D["📊 Chart Recommendation Engine"]
+    
+    %% Core Processing
+    C --> E["🔗 Elasticsearch Service"]
+    E --> F["📈 Data Aggregator"]
+    F --> G["🎨 Chart Generator"]
+    D --> G
+    
+    %% Output Layer
+    G --> H["⚙️ ECharts Config"]
+    H --> I["🌐 Next.js Frontend"]
+    
+    %% Memory & Intelligence Layer
+    J["💾 Redis Memory"] --> B
+    K["🧮 Chroma Vector DB"] --> C
+    L["🤖 Google Gemini API"] --> D
+    
+    %% Styling
+    classDef input fill:#e3f2fd
+    classDef processing fill:#f3e5f5
+    classDef output fill:#e8f5e8
+    classDef memory fill:#fff3e0
+    
+    class A input
+    class B,C,D,E,F,G processing
+    class H,I output
+    class J,K,L memory
+```
+
+### **🔄 Detailed Implementation Architecture**
+
 ```mermaid
 graph TB
     %% Frontend Layer
@@ -145,33 +183,32 @@ graph TB
     Routes --> DI
     
     %% Core Services (Managed by DI)
-    DI --> Agent["🧠 LangGraph Agent"]
-    DI --> ES_Service["🔍 Elasticsearch Service"]
-    DI --> Gemini_Service["🤖 Gemini Service"]
-    DI --> Redis_Service["💾 Redis Service"]
-    DI --> Vector_Service["🧮 Vector DB Service"]
+    DI --> Agent["🧠 LangGraph Agent Router"]
+    DI --> Parser["🔍 Query Parser & Validator"]
+    DI --> Recommender["📊 Chart Recommendation Engine"]
+    DI --> ES_Service["🔗 Elasticsearch Service"]
+    DI --> Aggregator["📈 Data Aggregator"]
+    DI --> Generator["🎨 Chart Generator"]
     
     %% Agent Workflow (LangGraph State Machine)
-    Agent --> Workflow["⚙️ LangGraph Workflow"]
-    Workflow --> GetIndices["📋 Get Indices"]
+    Agent --> GetIndices["📋 Get Indices"]
     GetIndices --> AnalyzeIntent["🎯 Analyze Intent"]
-    AnalyzeIntent --> GenerateQuery["📝 Generate Query"]
-    GenerateQuery --> ExecuteQuery["⚡ Execute Query"]
-    ExecuteQuery --> GenerateResponse["📤 Generate Response"]
+    AnalyzeIntent --> Parser
+    Parser --> GenerateQuery["📝 Generate Query"]
+    GenerateQuery --> ES_Service
+    ES_Service --> Aggregator
+    Aggregator --> Generator
+    Generator --> Response["📤 Generate Response"]
     
-    %% External Services Integration
+    %% Memory & Intelligence Integration
+    Redis["💾 Redis Memory"] --> Agent
+    Chroma["🧮 Chroma Vector DB"] --> Parser
+    Gemini["🤖 Google Gemini API"] --> Recommender
+    
+    %% External Services
     ES_Service --> ES["🗄️ Elasticsearch Cluster"]
-    Gemini_Service --> Gemini["🤖 Google Gemini API"]
-    Redis_Service --> Redis["💾 Redis Cache"]
-    Vector_Service --> Chroma["🧮 ChromaDB Vector Store"]
-    
-    %% Data Flow within Agent
-    AnalyzeIntent -.->|"Semantic Search"| Vector_Service
-    GenerateQuery -.->|"Cache Check"| Redis_Service
-    AnalyzeIntent -.->|"Intent Analysis"| Gemini_Service
-    GenerateQuery -.->|"Query Generation"| Gemini_Service
-    ExecuteQuery -.->|"Data Retrieval"| ES_Service
-    GenerateResponse -.->|"Response Generation"| Gemini_Service
+    Generator --> ECharts["⚙️ ECharts Config"]
+    ECharts --> Frontend["🌐 Next.js Frontend"]
     
     %% Infrastructure
     ES --> Docker1["🐳 Docker Container"]
@@ -184,10 +221,10 @@ graph TB
     classDef external fill:#fff3e0
     classDef infrastructure fill:#fafafa
     
-    class User,Chat,Store,WS,API frontend
-    class WSHandler,Routes,DI,ES_Service,Gemini_Service,Redis_Service,Vector_Service backend
-    class Agent,Workflow,GetIndices,AnalyzeIntent,GenerateQuery,ExecuteQuery,GenerateResponse agent
-    class ES,Gemini,Redis,Chroma external
+    class User,Chat,Store,WS,API,Frontend frontend
+    class WSHandler,Routes,DI,ES_Service,Aggregator,Generator backend
+    class Agent,Parser,Recommender,GetIndices,AnalyzeIntent,GenerateQuery,Response agent
+    class ES,Gemini,Redis,Chroma,ECharts external
     class Docker1,Docker2 infrastructure
 ```
 
