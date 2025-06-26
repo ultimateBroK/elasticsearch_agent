@@ -88,7 +88,10 @@ export function useWebSocket(): UseWebSocketReturn {
               sessionId: sessionId || undefined,
               chartConfig: data.chart_config,
               data: data.data,
-              intent: data.intent
+              intent: data.intent,
+              queryInsight: data.query_insight,
+              personalizedSuggestions: data.personalized_suggestions,
+              intelligenceMetrics: data.intelligence_metrics
             })
           }
           break

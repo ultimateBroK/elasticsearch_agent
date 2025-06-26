@@ -13,6 +13,21 @@ export interface Message {
   intent?: QueryIntent
   error?: boolean
   retryable?: boolean
+  // Intelligence data
+  queryInsight?: {
+    pattern: string
+    confidence: number
+    reasoning: string
+    suggested_improvements: string[]
+    related_patterns: string[]
+    user_behavior_hint?: string
+  }
+  personalizedSuggestions?: string[]
+  intelligenceMetrics?: {
+    pattern?: string
+    confidence?: number
+    user_behavior?: string
+  }
 }
 
 export interface ConnectionState {

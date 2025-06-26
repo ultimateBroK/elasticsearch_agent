@@ -7,9 +7,11 @@ interface MessageListProps {
   messages: Message[]
   isLoading: boolean
   onRetryMessage?: (messageId: string) => void
+  onSuggestionClick?: (suggestion: string) => void
+  onFeedback?: (feedback: { satisfaction: number; chart_rating: number }) => void
 }
 
-export function MessageList({ messages, isLoading, onRetryMessage }: MessageListProps) {
+export function MessageList({ messages, isLoading, onRetryMessage, onSuggestionClick, onFeedback }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll to bottom when new messages arrive
@@ -36,6 +38,8 @@ export function MessageList({ messages, isLoading, onRetryMessage }: MessageList
               key={message.id} 
               message={message} 
               onRetry={onRetryMessage ? () => onRetryMessage(message.id) : undefined}
+              onSuggestionClick={onSuggestionClick}
+              onFeedback={onFeedback}
             />
           ))
         )}

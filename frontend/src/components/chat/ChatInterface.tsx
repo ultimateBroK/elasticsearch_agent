@@ -85,7 +85,10 @@ export function ChatInterface() {
         sender: 'agent',
         sessionId: response.session_id,
         chartConfig: response.chart_config,
-        data: response.data
+        data: response.data,
+        queryInsight: response.query_insight,
+        personalizedSuggestions: response.personalized_suggestions,
+        intelligenceMetrics: response.intelligence_metrics
       })
 
     } catch (error) {
@@ -154,6 +157,24 @@ export function ChatInterface() {
     }
   }
 
+  const handleUserFeedback = async (feedback: { satisfaction: number; chart_rating: number }) => {
+    try {
+      // Send feedback to backend for learning
+      await apiClient.submitFeedback({
+        session_id: sessionId,
+        satisfaction: feedback.satisfaction,
+        chart_rating: feedback.chart_rating,
+        response_quality: feedback.satisfaction, // Use satisfaction as proxy for response quality
+        timestamp: new Date().toISOString()
+      })
+      
+      console.log('Feedback submitted successfully')
+    } catch (error) {
+      console.error('Failed to submit feedback:', error)
+      // Don't show error to user for feedback submission failures
+    }
+  }
+
   return (
     <div className="flex flex-col h-screen max-h-screen">
       <Card className="flex-1 flex flex-col">
@@ -173,6 +194,8 @@ export function ChatInterface() {
             messages={messages} 
             isLoading={isLoading || isTyping}
             onRetryMessage={handleRetryMessage}
+            onSuggestionClick={handleSendMessage}
+            onFeedback={handleUserFeedback}
           />
           <MessageInput 
             onSendMessage={handleSendMessage}

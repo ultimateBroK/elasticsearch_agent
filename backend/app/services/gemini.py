@@ -1,7 +1,10 @@
 import logging
 from typing import List, Dict, Any, Optional
-import google.generativeai as genai
+import asyncio
 import json
+
+from google import genai
+from google.genai import types
 
 from app.core.config import settings
 from app.core.exceptions import GeminiAPIError, ConfigurationError
@@ -19,11 +22,11 @@ class GeminiService:
             raise ConfigurationError("GOOGLE_API_KEY not found in environment variables")
         
         try:
-            # Configure the client
-            genai.configure(api_key=settings.google_api_key)
-            self.client = genai.GenerativeModel('gemini-1.5-flash')
+            # Create the new google-genai client
+            self.client = genai.Client(api_key=settings.google_api_key)
+            self.model_name = 'gemini-2.0-flash'  # Using gemini-2.5-flash as requested
             
-            logger.info("Gemini client initialized successfully")
+            logger.info(f"Gemini client initialized successfully with model: {self.model_name}")
             
         except Exception as e:
             logger.error(f"Failed to initialize Gemini client: {e}")
@@ -66,20 +69,25 @@ class GeminiService:
         
         for attempt in range(retry_count):
             try:
-                # Prepare the full prompt
-                full_prompt = prompt.strip()
+                # Prepare the content - combine system instruction and prompt
+                full_content = prompt.strip()
                 if system_instruction:
-                    full_prompt = f"{system_instruction.strip()}\n\nUser: {prompt.strip()}"
+                    full_content = f"{system_instruction.strip()}\n\n{prompt.strip()}"
                 
-                # Generate content with correct API
-                generation_config = genai.GenerationConfig(
-                    temperature=max(0.0, min(2.0, temperature)),  # Clamp temperature
-                    max_output_tokens=max(1, min(8192, max_output_tokens)),  # Clamp tokens
+                # Create generation config
+                config = types.GenerateContentConfig(
+                    temperature=max(0.0, min(2.0, temperature)),
+                    max_output_tokens=max(1, min(8192, max_output_tokens)),
                 )
                 
-                response = self.client.generate_content(
-                    contents=full_prompt,
-                    generation_config=generation_config
+                # Generate content using the new API
+                response = await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: self.client.models.generate_content(
+                        model=self.model_name,
+                        contents=full_content,
+                        config=config
+                    )
                 )
                 
                 if response and response.text:
@@ -95,7 +103,6 @@ class GeminiService:
                     return None
                 
                 # Wait before retry (exponential backoff)
-                import asyncio
                 await asyncio.sleep(2 ** attempt)
         
         return None

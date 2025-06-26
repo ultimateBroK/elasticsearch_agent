@@ -51,7 +51,7 @@ dependencies = [
     "websockets>=12.0",
     "uvicorn>=0.24.0",
     "python-multipart>=0.0.6",
-    "google-genai>=0.3.0"     # Google Gemini API (updated package)
+    "google-genai>=1.21.1"   # Google Gemini API (latest package with Gemini 2.5 Flash)
 ]
 
 [tool.uv]
@@ -104,7 +104,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # Create & setup backend
 uv init backend
 cd backend
-uv add fastapi elasticsearch langgraph redis pandas google-genai
+uv add fastapi elasticsearch langgraph redis pandas google-genai>=1.21.1
 uv add --dev pytest black ruff
 
 # Run development server

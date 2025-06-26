@@ -5,6 +5,7 @@ from app.services.gemini import GeminiService
 from app.services.elasticsearch import ElasticsearchService
 from app.services.redis import RedisService
 from app.services.vector_db import VectorDBService
+from app.services.query_intelligence import query_intelligence_service, QueryInsight
 import hashlib
 import json
 
@@ -22,6 +23,8 @@ class AgentState(TypedDict):
     chart_config: Optional[Dict[str, Any]]
     available_indices: List[str]
     error: Optional[str]
+    query_insight: Optional[QueryInsight]
+    personalized_suggestions: Optional[List[str]]
 
 
 class ElasticsearchAgent:
@@ -49,6 +52,7 @@ class ElasticsearchAgent:
         # Add nodes
         workflow.add_node("analyze_intent", self._analyze_intent)
         workflow.add_node("get_indices", self._get_available_indices)
+        workflow.add_node("analyze_intelligence", self._analyze_query_intelligence)
         workflow.add_node("generate_query", self._generate_elasticsearch_query)
         workflow.add_node("execute_query", self._execute_query)
         workflow.add_node("generate_response", self._generate_response)
@@ -59,8 +63,9 @@ class ElasticsearchAgent:
         
         # Add edges
         workflow.add_edge("get_indices", "analyze_intent")
+        workflow.add_edge("analyze_intent", "analyze_intelligence")
         workflow.add_conditional_edges(
-            "analyze_intent",
+            "analyze_intelligence",
             self._should_query_elasticsearch,
             {
                 "query": "generate_query",
@@ -137,6 +142,45 @@ class ElasticsearchAgent:
             state["similar_queries"] = []
             state["conversation_context"] = []
             state["error"] = "Failed to analyze your request"
+        
+        return state
+    
+    async def _analyze_query_intelligence(self, state: AgentState) -> AgentState:
+        """Analyze query intelligence patterns and user behavior."""
+        try:
+            user_message = state["user_message"]
+            session_id = state.get("session_id")
+            intent_analysis = state.get("intent_analysis", {})
+            
+            # Initialize query intelligence service with our services
+            query_intelligence_service.vector_db_service = self.vector_db_service
+            query_intelligence_service.redis_service = self.redis_service
+            
+            # Analyze query patterns
+            query_insight = await query_intelligence_service.analyze_query_pattern(
+                user_message=user_message,
+                intent_analysis=intent_analysis,
+                session_id=session_id
+            )
+            
+            state["query_insight"] = query_insight
+            
+            # Get personalized suggestions
+            if session_id:
+                suggestions = await query_intelligence_service.get_personalized_suggestions(
+                    session_id=session_id,
+                    current_context=user_message
+                )
+                state["personalized_suggestions"] = suggestions
+            
+            logger.info(f"Query intelligence analysis completed: {query_insight.pattern.value} "
+                       f"(confidence: {query_insight.confidence:.2f})")
+            
+        except Exception as e:
+            logger.error(f"Query intelligence analysis failed: {e}")
+            # Continue without intelligence analysis
+            state["query_insight"] = None
+            state["personalized_suggestions"] = []
         
         return state
     
@@ -239,16 +283,24 @@ class ElasticsearchAgent:
             session_id = state.get("session_id")
             intent_analysis = state.get("intent_analysis", {})
             query_results = state.get("query_results", {})
+            query_insight = state.get("query_insight")
+            suggestions = state.get("personalized_suggestions", [])
             
             if state.get("error"):
                 # Generate error response
                 state["response_message"] = f"I apologize, but I encountered an issue: {state['error']}. Please try rephrasing your question."
             else:
-                # Generate normal response
-                response = await self.gemini_service.generate_response_message(
+                # Generate enhanced response with intelligence insights
+                base_response = await self.gemini_service.generate_response_message(
                     user_message, query_results, intent_analysis
                 )
-                state["response_message"] = response
+                
+                # Enhance response with intelligence insights
+                enhanced_response = self._enhance_response_with_intelligence(
+                    base_response, query_insight, suggestions
+                )
+                
+                state["response_message"] = enhanced_response
                 
                 # Store successful query in vector database for future semantic search
                 if self.vector_db_service and query_results.get("total_hits", 0) > 0:
@@ -283,6 +335,19 @@ class ElasticsearchAgent:
                     logger.info("Stored conversation context")
                 except Exception as e:
                     logger.warning(f"Failed to store conversation context: {e}")
+            
+            # Update user profile with query insights
+            if query_insight and session_id:
+                try:
+                    await query_intelligence_service.update_user_profile(
+                        session_id=session_id,
+                        query_insight=query_insight,
+                        intent_analysis=intent_analysis,
+                        user_feedback=None  # Could be collected from frontend
+                    )
+                    logger.info("Updated user profile with query insights")
+                except Exception as e:
+                    logger.warning(f"Failed to update user profile: {e}")
             
             logger.info("Response generated successfully")
             
@@ -495,6 +560,36 @@ class ElasticsearchAgent:
             # Fallback to basic chart config
             return self._generate_chart_config(intent_analysis, query_results)
     
+    def _enhance_response_with_intelligence(
+        self,
+        base_response: str,
+        query_insight: Optional[QueryInsight],
+        suggestions: List[str]
+    ) -> str:
+        """Enhance response with intelligence insights and suggestions."""
+        
+        enhanced_response = base_response
+        
+        # Add query pattern insights
+        if query_insight and query_insight.confidence > 0.7:
+            pattern_name = query_insight.pattern.value.replace('_', ' ').title()
+            enhanced_response += f"\n\n🧠 **Intelligence Insight**: I detected a {pattern_name} pattern in your query "
+            enhanced_response += f"(confidence: {query_insight.confidence:.0%}). {query_insight.reasoning}"
+            
+            # Add improvement suggestions
+            if query_insight.suggested_improvements:
+                enhanced_response += "\n\n💡 **Suggestions for better analysis**:"
+                for i, improvement in enumerate(query_insight.suggested_improvements[:3], 1):
+                    enhanced_response += f"\n{i}. {improvement}"
+        
+        # Add personalized suggestions
+        if suggestions:
+            enhanced_response += "\n\n🎯 **You might also want to try**:"
+            for i, suggestion in enumerate(suggestions[:3], 1):
+                enhanced_response += f"\n{i}. {suggestion}"
+        
+        return enhanced_response
+    
     async def process_message(
         self, 
         user_message: str, 
@@ -510,7 +605,9 @@ class ElasticsearchAgent:
             "response_message": "",
             "chart_config": None,
             "available_indices": [],
-            "error": None
+            "error": None,
+            "query_insight": None,
+            "personalized_suggestions": []
         }
         
         try:
@@ -522,7 +619,14 @@ class ElasticsearchAgent:
                 "session_id": session_id,
                 "chart_config": result.get("chart_config"),
                 "data": result.get("query_results", {}).get("data", []),
-                "intent": result.get("intent_analysis", {}).get("intent", "general")
+                "intent": result.get("intent_analysis", {}).get("intent", "general"),
+                "query_insight": result.get("query_insight"),
+                "personalized_suggestions": result.get("personalized_suggestions", []),
+                "intelligence_metrics": {
+                    "pattern": result.get("query_insight").pattern.value if result.get("query_insight") else None,
+                    "confidence": result.get("query_insight").confidence if result.get("query_insight") else None,
+                    "user_behavior": result.get("query_insight").user_behavior_hint.value if result.get("query_insight") and result.get("query_insight").user_behavior_hint else None
+                }
             }
             
         except Exception as e:

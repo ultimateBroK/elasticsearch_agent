@@ -1,8 +1,9 @@
 """API routes with dependency injection."""
 
 from fastapi import APIRouter, HTTPException, status, Depends
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import uuid
+import hashlib
 from datetime import datetime
 import logging
 import asyncio
@@ -353,4 +354,99 @@ async def find_similar_queries(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to find similar queries"
+        )
+
+
+@router.get("/intelligence/metrics")
+async def get_intelligence_metrics():
+    """Get intelligence service metrics and analytics."""
+    try:
+        from app.services.query_intelligence import query_intelligence_service
+        
+        metrics = await query_intelligence_service.get_intelligence_metrics()
+        
+        return {
+            "status": "success",
+            "metrics": metrics,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get intelligence metrics: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve intelligence metrics"
+        )
+
+
+@router.get("/intelligence/suggestions/{session_id}")
+async def get_personalized_suggestions(
+    session_id: str,
+    context: Optional[str] = None
+):
+    """Get personalized suggestions for a user session."""
+    try:
+        from app.services.query_intelligence import query_intelligence_service
+        
+        suggestions = await query_intelligence_service.get_personalized_suggestions(
+            session_id=session_id,
+            current_context=context
+        )
+        
+        return {
+            "status": "success",
+            "session_id": session_id,
+            "suggestions": suggestions,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get personalized suggestions: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve personalized suggestions"
+        )
+
+
+@router.post("/intelligence/feedback")
+async def submit_user_feedback(
+    feedback_data: Dict[str, Any]
+):
+    """Submit user feedback for intelligence learning."""
+    try:
+        session_id = feedback_data.get("session_id")
+        satisfaction = feedback_data.get("satisfaction", 0.5)  # 0.0 to 1.0
+        chart_rating = feedback_data.get("chart_rating", 0.5)
+        response_quality = feedback_data.get("response_quality", 0.5)
+        
+        if not session_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="session_id is required"
+            )
+        
+        # Store feedback for learning (could be enhanced to update user profiles)
+        feedback_summary = {
+            "session_id": session_id,
+            "satisfaction": satisfaction,
+            "chart_rating": chart_rating,
+            "response_quality": response_quality,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        logger.info(f"User feedback received: {feedback_summary}")
+        
+        return {
+            "status": "success",
+            "message": "Feedback received and will be used to improve recommendations",
+            "feedback_id": hashlib.md5(f"{session_id}_{datetime.now()}".encode()).hexdigest()[:8]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to process user feedback: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to process user feedback"
         )

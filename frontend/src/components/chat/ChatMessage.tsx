@@ -4,13 +4,16 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { Message } from "@/store/chatStore"
 import { ChartRenderer } from "@/components/charts/ChartRenderer"
+import { IntelligenceInsights } from "@/components/IntelligenceInsights"
 
 interface ChatMessageProps {
   message: Message
   onRetry?: () => void
+  onSuggestionClick?: (suggestion: string) => void
+  onFeedback?: (feedback: { satisfaction: number; chart_rating: number }) => void
 }
 
-export function ChatMessage({ message, onRetry }: ChatMessageProps) {
+export function ChatMessage({ message, onRetry, onSuggestionClick, onFeedback }: ChatMessageProps) {
   const isUser = message.sender === 'user'
   const isError = message.error
   
@@ -74,6 +77,17 @@ export function ChatMessage({ message, onRetry }: ChatMessageProps) {
               <ChartRenderer 
                 chartConfig={message.chartConfig} 
                 data={message.data} 
+              />
+            )}
+            
+            {/* Intelligence Insights */}
+            {!isUser && !isError && (message.queryInsight || message.personalizedSuggestions || message.intelligenceMetrics) && (
+              <IntelligenceInsights
+                queryInsight={message.queryInsight}
+                personalizedSuggestions={message.personalizedSuggestions}
+                intelligenceMetrics={message.intelligenceMetrics}
+                onSuggestionClick={onSuggestionClick}
+                onFeedback={onFeedback}
               />
             )}
             

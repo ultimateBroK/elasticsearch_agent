@@ -40,7 +40,7 @@ async def test_gemini_basic():
         
     except ImportError:
         logger.error("❌ google-genai package not installed!")
-        logger.info("Please install: uv add google-genai")
+        logger.info("Please install: uv add google-genai>=1.21.1")
         return False
     except Exception as e:
         logger.error(f"❌ Gemini API test failed: {e}")
