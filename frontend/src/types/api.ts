@@ -63,6 +63,28 @@ export interface ChartConfig {
   y_axis_suggestion?: string
   label_field?: string
   value_field?: string
+  // Enhanced recommendation fields
+  confidence?: number
+  reasoning?: string
+  ai_explanation?: string
+  alternative_charts?: Array<{
+    type: string
+    confidence: number
+    reasoning: string
+  }>
+  data_profile?: {
+    total_records: number
+    field_types: Record<string, string>
+    numeric_fields: string[]
+    categorical_fields: string[]
+    temporal_fields: string[]
+    data_characteristics: string[]
+  }
+  available_fields?: {
+    numeric: string[]
+    text: string[]
+    date: string[]
+  }
 }
 
 export interface HealthResponse {

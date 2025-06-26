@@ -22,11 +22,8 @@ class VectorDBService:
     def __init__(self):
         """Initialize ChromaDB client and embedding model."""
         try:
-            # Initialize ChromaDB client
-            self.client = chromadb.Client(Settings(
-                chroma_db_impl="duckdb+parquet",
-                persist_directory="./chroma_db"
-            ))
+            # Initialize ChromaDB client with new configuration
+            self.client = chromadb.PersistentClient(path="./chroma_db")
             
             # Initialize embedding model
             self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
@@ -175,9 +172,10 @@ class VectorDBService:
             # Search for similar queries
             results = await asyncio.get_event_loop().run_in_executor(
                 None,
-                self.query_collection.query,
-                query_embedding,
-                limit
+                lambda: self.query_collection.query(
+                    query_embeddings=[query_embedding],
+                    n_results=limit
+                )
             )
             
             similar_queries = []
@@ -279,10 +277,11 @@ class VectorDBService:
             # Search for relevant context
             results = await asyncio.get_event_loop().run_in_executor(
                 None,
-                self.context_collection.query,
-                query_embedding,
-                limit,
-                {"session_id": session_id}  # Filter by session
+                lambda: self.context_collection.query(
+                    query_embeddings=[query_embedding],
+                    n_results=limit,
+                    where={"session_id": session_id}  # Filter by session
+                )
             )
             
             context_items = []
@@ -379,9 +378,10 @@ class VectorDBService:
             # Search for relevant schemas
             results = await asyncio.get_event_loop().run_in_executor(
                 None,
-                self.schema_collection.query,
-                query_embedding,
-                limit
+                lambda: self.schema_collection.query(
+                    query_embeddings=[query_embedding],
+                    n_results=limit
+                )
             )
             
             schemas = []

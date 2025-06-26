@@ -3,7 +3,7 @@ import json
 from datetime import datetime, timedelta
 import random
 from typing import List, Dict, Any
-from app.services.elasticsearch import es_service
+from app.services.elasticsearch import ElasticsearchService
 import logging
 
 logger = logging.getLogger(__name__)
@@ -12,7 +12,8 @@ logger = logging.getLogger(__name__)
 class SampleDataGenerator:
     """Generate sample data for testing the Elasticsearch Agent."""
     
-    def __init__(self):
+    def __init__(self, es_service=None):
+        self.es_service = es_service or ElasticsearchService()
         self.products = [
             "Laptop", "Smartphone", "Tablet", "Headphones", "Smart Watch",
             "Camera", "Keyboard", "Mouse", "Monitor", "Speaker"
@@ -102,14 +103,14 @@ class SampleDataGenerator:
         """Create index with proper mapping."""
         try:
             # Check if index exists
-            exists = await es_service.client.indices.exists(index=index_name)
+            exists = await self.es_service.client.indices.exists(index=index_name)
             
             if exists:
                 logger.info(f"Index '{index_name}' already exists, skipping creation")
                 return
             
             # Create index with mapping
-            await es_service.client.indices.create(
+            await self.es_service.client.indices.create(
                 index=index_name,
                 body={
                     "mappings": mapping,
@@ -137,7 +138,7 @@ class SampleDataGenerator:
                 bulk_body.append(doc)
             
             # Execute bulk request
-            response = await es_service.client.bulk(
+            response = await self.es_service.client.bulk(
                 body=bulk_body,
                 refresh=True
             )

@@ -382,27 +382,104 @@ export function ChartRenderer({ chartConfig, data }: ChartRendererProps) {
     <Card className="mt-3">
       <CardHeader>
         <CardTitle className="text-sm">📊 {chartConfig.title}</CardTitle>
+        
+        {/* Enhanced recommendation info */}
+        {chartConfig.confidence && (
+          <div className="text-xs text-muted-foreground mb-2">
+            <Badge variant="secondary" className="mr-2">
+              {(chartConfig.confidence * 100).toFixed(0)}% confidence
+            </Badge>
+            {chartConfig.reasoning && (
+              <span className="italic">{chartConfig.reasoning}</span>
+            )}
+          </div>
+        )}
+        
+        {/* AI explanation */}
+        {chartConfig.ai_explanation && (
+          <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded mb-2">
+            💡 {chartConfig.ai_explanation}
+          </div>
+        )}
+        
         <div className="flex items-center justify-between">
           <div className="text-xs text-muted-foreground">
             {chartConfig.data_count} records
+            {chartConfig.data_profile && (
+              <span className="ml-2">
+                • {chartConfig.data_profile.numeric_fields.length} numeric
+                • {chartConfig.data_profile.categorical_fields.length} categorical
+                {chartConfig.data_profile.temporal_fields.length > 0 && (
+                  <span> • {chartConfig.data_profile.temporal_fields.length} temporal</span>
+                )}
+              </span>
+            )}
           </div>
           
-          {/* Chart type selector */}
+          {/* Chart type selector with alternatives */}
           <div className="flex items-center gap-1">
             <span className="text-xs text-muted-foreground">Type:</span>
-            {recommendedTypes.map((type) => (
+            {/* Primary recommendation */}
+            <Button
+              size="sm"
+              variant={chartType === chartConfig.chart_type ? "default" : "outline"}
+              onClick={() => setChartType(chartConfig.chart_type)}
+              className="text-xs h-6 px-2"
+              title={chartConfig.reasoning || "Primary recommendation"}
+            >
+              {chartConfig.chart_type}
+              {chartConfig.confidence && (
+                <span className="ml-1 text-xs opacity-70">
+                  {(chartConfig.confidence * 100).toFixed(0)}%
+                </span>
+              )}
+            </Button>
+            
+            {/* Alternative recommendations */}
+            {chartConfig.alternative_charts?.map((alt, index) => (
+              <Button
+                key={`alt-${index}`}
+                size="sm"
+                variant={chartType === alt.type ? "default" : "outline"}
+                onClick={() => setChartType(alt.type as ChartType)}
+                className="text-xs h-6 px-2 opacity-75"
+                title={alt.reasoning}
+              >
+                {alt.type}
+                <span className="ml-1 text-xs opacity-70">
+                  {(alt.confidence * 100).toFixed(0)}%
+                </span>
+              </Button>
+            ))}
+            
+            {/* Fallback to basic recommendations */}
+            {recommendedTypes.filter(type => 
+              type !== chartConfig.chart_type && 
+              !chartConfig.alternative_charts?.some(alt => alt.type === type)
+            ).map((type) => (
               <Button
                 key={type}
                 size="sm"
                 variant={chartType === type ? "default" : "outline"}
                 onClick={() => setChartType(type)}
-                className="text-xs h-6 px-2"
+                className="text-xs h-6 px-2 opacity-50"
               >
                 {type}
               </Button>
             ))}
           </div>
         </div>
+        
+        {/* Data characteristics */}
+        {chartConfig.data_profile?.data_characteristics && (
+          <div className="flex flex-wrap gap-1 mt-2">
+            {chartConfig.data_profile.data_characteristics.map((characteristic, index) => (
+              <Badge key={index} variant="outline" className="text-xs">
+                {characteristic.replace('_', ' ')}
+              </Badge>
+            ))}
+          </div>
+        )}
       </CardHeader>
       <CardContent>
         <ReactECharts

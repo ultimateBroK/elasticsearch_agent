@@ -1,11 +1,11 @@
 import logging
 from typing import List, Dict, Any, Optional
-import google.genai as genai
-from google.genai.types import GenerateContentConfig
+import google.generativeai as genai
 import json
 
 from app.core.config import settings
 from app.core.exceptions import GeminiAPIError, ConfigurationError
+from app.services.chart_recommendation import chart_recommendation_service, ChartRecommendation
 
 logger = logging.getLogger(__name__)
 
@@ -71,15 +71,15 @@ class GeminiService:
                 if system_instruction:
                     full_prompt = f"{system_instruction.strip()}\n\nUser: {prompt.strip()}"
                 
-                # Generate content
-                config = GenerateContentConfig(
+                # Generate content with correct API
+                generation_config = genai.GenerationConfig(
                     temperature=max(0.0, min(2.0, temperature)),  # Clamp temperature
                     max_output_tokens=max(1, min(8192, max_output_tokens)),  # Clamp tokens
                 )
                 
-                response = await self.client.generate_content_async(
+                response = self.client.generate_content(
                     contents=full_prompt,
-                    config=config
+                    generation_config=generation_config
                 )
                 
                 if response and response.text:
@@ -100,27 +100,50 @@ class GeminiService:
         
         return None
     
-    async def analyze_query_intent(self, user_message: str) -> Dict[str, Any]:
-        """Analyze user message to determine intent and extract parameters."""
+    async def analyze_query_intent(
+        self, 
+        user_message: str,
+        similar_queries: Optional[List[Dict[str, Any]]] = None,
+        conversation_context: Optional[List[Dict[str, Any]]] = None
+    ) -> Dict[str, Any]:
+        """Analyze user message to determine intent and extract parameters with enhanced context."""
         system_instruction = """
-        You are an expert at analyzing user queries for Elasticsearch operations.
+        You are an expert at analyzing user queries for Elasticsearch operations with semantic understanding.
         
-        Given a user message, identify:
+        Given a user message, conversation context, and similar queries, identify:
         1. Intent: search, aggregate, filter, chart, count, or general
         2. Index: which elasticsearch index to query (if mentioned)
         3. Time range: any time-based filters
         4. Fields: relevant fields mentioned
-        5. Chart type: if user wants visualization (line, bar, pie)
+        5. Chart type: if user wants visualization (line, bar, pie, scatter, area)
         6. Aggregation: type of aggregation needed (terms, date_histogram, avg, sum, etc.)
+        7. Context relevance: how this relates to previous conversation
+        8. Confidence: how confident you are in the analysis (0.0-1.0)
+        
+        Use similar queries and conversation context to improve accuracy.
+        Learn from successful patterns and adapt to user preferences.
         
         Respond with a JSON object containing these fields.
-        If uncertain, make reasonable assumptions or mark as null.
+        If uncertain, make reasonable assumptions based on context.
         
         Available sample indices: sample-sales, sample-logs
         """
         
+        # Build context information
+        context_info = ""
+        if similar_queries:
+            context_info += "\nSimilar successful queries:\n"
+            for i, query in enumerate(similar_queries[:3], 1):
+                context_info += f"{i}. '{query['natural_query']}' -> {query['intent']} (similarity: {query['similarity']:.2f})\n"
+        
+        if conversation_context:
+            context_info += "\nRecent conversation context:\n"
+            for i, ctx in enumerate(conversation_context[:2], 1):
+                context_info += f"{i}. User: '{ctx['user_message']}' -> Intent: {ctx['intent']}\n"
+        
         prompt = f"""
         User message: "{user_message}"
+        {context_info}
         
         Analyze this message and return a JSON response with:
         {{
@@ -128,9 +151,11 @@ class GeminiService:
             "index": "index_name or null",
             "time_range": "last_30_days|last_week|today|null",
             "fields": ["field1", "field2"] or null,
-            "chart_type": "line|bar|pie|null",
+            "chart_type": "line|bar|pie|scatter|area|null",
             "aggregation_type": "terms|date_histogram|avg|sum|count|null",
-            "query_description": "brief description of what user wants"
+            "query_description": "brief description of what user wants",
+            "context_relevance": "how this relates to previous conversation",
+            "confidence": 0.8
         }}
         """
         
@@ -243,6 +268,124 @@ class GeminiService:
         except Exception as e:
             logger.error(f"Failed to generate response: {e}")
             return "I processed your query and found some results."
+    
+    async def generate_enhanced_chart_recommendations(
+        self,
+        data: List[Dict[str, Any]],
+        intent_analysis: Dict[str, Any],
+        user_preferences: Optional[Dict[str, Any]] = None
+    ) -> List[Dict[str, Any]]:
+        """Generate enhanced chart recommendations using both AI and ML analysis."""
+        try:
+            # Get ML-based recommendations
+            ml_recommendations = chart_recommendation_service.recommend_charts(
+                data=data,
+                intent=intent_analysis.get('intent'),
+                user_preferences=user_preferences
+            )
+            
+            # Get AI-based analysis for context
+            ai_analysis = await self._get_ai_chart_analysis(data, intent_analysis)
+            
+            # Combine and enhance recommendations
+            enhanced_recommendations = []
+            
+            for ml_rec in ml_recommendations:
+                # Generate explanation using AI
+                explanation = await self._generate_chart_explanation(ml_rec, data, intent_analysis)
+                
+                enhanced_rec = {
+                    "chart_type": ml_rec.chart_type.value,
+                    "confidence": ml_rec.confidence,
+                    "reasoning": ml_rec.reasoning,
+                    "suggested_fields": ml_rec.suggested_fields,
+                    "configuration": ml_rec.configuration,
+                    "ai_explanation": explanation,
+                    "data_profile": chart_recommendation_service.analyze_data(data).__dict__
+                }
+                
+                enhanced_recommendations.append(enhanced_rec)
+            
+            return enhanced_recommendations
+            
+        except Exception as e:
+            logger.error(f"Failed to generate enhanced chart recommendations: {e}")
+            return []
+    
+    async def _get_ai_chart_analysis(
+        self,
+        data: List[Dict[str, Any]],
+        intent_analysis: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Get AI analysis of data for chart recommendations."""
+        if not data:
+            return {}
+        
+        # Sample the data for analysis
+        sample_data = data[:5] if len(data) > 5 else data
+        
+        system_instruction = """
+        You are an expert data visualization analyst.
+        Analyze the provided data sample and user intent to suggest optimal chart types.
+        Consider data characteristics, patterns, and visualization best practices.
+        """
+        
+        prompt = f"""
+        Data sample: {json.dumps(sample_data, indent=2)}
+        User intent: {intent_analysis.get('intent', 'unknown')}
+        Query description: {intent_analysis.get('query_description', '')}
+        
+        Analyze this data and provide insights for chart selection:
+        1. Data characteristics (temporal, categorical, numerical patterns)
+        2. Recommended chart types with reasoning
+        3. Key insights that should be highlighted
+        4. Potential visualization challenges
+        
+        Return a JSON response with your analysis.
+        """
+        
+        try:
+            response = await self.generate_content(prompt, system_instruction, temperature=0.4)
+            if response:
+                return self._extract_json_from_response(response) or {}
+            return {}
+        except Exception as e:
+            logger.error(f"Failed to get AI chart analysis: {e}")
+            return {}
+    
+    async def _generate_chart_explanation(
+        self,
+        recommendation: ChartRecommendation,
+        data: List[Dict[str, Any]],
+        intent_analysis: Dict[str, Any]
+    ) -> str:
+        """Generate a detailed explanation for a chart recommendation."""
+        system_instruction = """
+        You are a data visualization expert explaining chart recommendations to users.
+        Provide clear, concise explanations that help users understand why a particular
+        chart type is recommended for their data and intent.
+        """
+        
+        prompt = f"""
+        Chart recommendation:
+        - Type: {recommendation.chart_type.value}
+        - Confidence: {recommendation.confidence:.1%}
+        - Reasoning: {recommendation.reasoning}
+        - Suggested fields: {recommendation.suggested_fields}
+        
+        User intent: {intent_analysis.get('intent', 'unknown')}
+        Data size: {len(data)} records
+        
+        Generate a user-friendly explanation (2-3 sentences) of why this chart type
+        is recommended for this specific data and use case.
+        """
+        
+        try:
+            response = await self.generate_content(prompt, system_instruction, temperature=0.6)
+            return response or recommendation.reasoning
+        except Exception as e:
+            logger.error(f"Failed to generate chart explanation: {e}")
+            return recommendation.reasoning
     
     def _extract_json_from_response(self, response: str) -> Optional[dict]:
         """Extract JSON from Gemini response with multiple strategies."""

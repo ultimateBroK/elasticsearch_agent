@@ -11,7 +11,7 @@ import os
 # Add parent directory to path to import our modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.services.elasticsearch import es_service
+from app.services.elasticsearch import ElasticsearchService
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -150,9 +150,13 @@ async def ingest_bulk_data(index_name: str, documents: List[Dict[str, Any]]):
         raise
 
 
-async def setup_sample_data():
+async def setup_sample_data(es_service=None):
     """Setup all sample data."""
     logger.info("Starting sample data setup...")
+    
+    # Initialize service if not provided
+    if es_service is None:
+        es_service = ElasticsearchService()
     
     # Check ES connection
     if not await es_service.ping():

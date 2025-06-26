@@ -216,9 +216,9 @@ class ElasticsearchAgent:
             
             state["query_results"] = query_results
             
-            # Generate chart config if needed and data is available
-            if intent_analysis.get("chart_type") and query_results.get("total_hits", 0) > 0:
-                chart_config = self._generate_chart_config(
+            # Generate enhanced chart config if needed and data is available
+            if query_results.get("total_hits", 0) > 0:
+                chart_config = await self._generate_enhanced_chart_config(
                     intent_analysis, query_results
                 )
                 state["chart_config"] = chart_config
@@ -389,6 +389,111 @@ class ElasticsearchAgent:
                 config["value_field"] = numeric_fields[0] if numeric_fields else None
         
         return config
+    
+    async def _generate_enhanced_chart_config(
+        self, 
+        intent_analysis: Dict[str, Any], 
+        query_results: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Generate enhanced chart configuration using AI and ML recommendations."""
+        try:
+            data = query_results.get("data", [])
+            if not data:
+                return self._generate_chart_config(intent_analysis, query_results)
+            
+            # Get enhanced chart recommendations from Gemini service
+            enhanced_recommendations = await self.gemini_service.generate_enhanced_chart_recommendations(
+                data=data,
+                intent_analysis=intent_analysis,
+                user_preferences=None  # Could be retrieved from user profile in the future
+            )
+            
+            # Use the top recommendation or fallback to basic config
+            if enhanced_recommendations:
+                top_recommendation = enhanced_recommendations[0]
+                
+                # Build enhanced config
+                config = {
+                    "chart_type": top_recommendation["chart_type"],
+                    "title": intent_analysis.get("query_description", "Data Visualization"),
+                    "has_data": len(data) > 0,
+                    "data_count": len(data),
+                    "confidence": top_recommendation["confidence"],
+                    "reasoning": top_recommendation["reasoning"],
+                    "ai_explanation": top_recommendation.get("ai_explanation", ""),
+                    "suggested_fields": top_recommendation["suggested_fields"],
+                    "configuration": top_recommendation["configuration"],
+                    "alternative_charts": [
+                        {
+                            "type": rec["chart_type"],
+                            "confidence": rec["confidence"],
+                            "reasoning": rec["reasoning"]
+                        }
+                        for rec in enhanced_recommendations[1:3]  # Include top 2 alternatives
+                    ],
+                    "data_profile": top_recommendation.get("data_profile", {})
+                }
+                
+                # Add aggregation handling
+                aggregations = query_results.get("aggregations", {})
+                if aggregations:
+                    config["use_aggregations"] = True
+                    config["aggregation_data"] = aggregations
+                else:
+                    config["use_aggregations"] = False
+                
+                # Add smart field mapping based on ML recommendations
+                if data and len(data) > 0:
+                    sample_doc = data[0]
+                    
+                    # Extract field types for better mapping
+                    numeric_fields = []
+                    text_fields = []
+                    date_fields = []
+                    
+                    for field, value in sample_doc.items():
+                        if isinstance(value, (int, float)):
+                            numeric_fields.append(field)
+                        elif isinstance(value, str):
+                            if "timestamp" in field.lower() or "date" in field.lower():
+                                date_fields.append(field)
+                            else:
+                                text_fields.append(field)
+                    
+                    config["available_fields"] = {
+                        "numeric": numeric_fields,
+                        "text": text_fields,
+                        "date": date_fields
+                    }
+                    
+                    # Smart axis suggestions based on ML recommendations and chart type
+                    chart_type = config["chart_type"]
+                    suggested_fields = config["suggested_fields"]
+                    
+                    if chart_type in ["line", "area"] and date_fields:
+                        config["x_axis_suggestion"] = suggested_fields.get("x_axis", date_fields[0])
+                        config["y_axis_suggestion"] = suggested_fields.get("y_axis", numeric_fields[0] if numeric_fields else None)
+                    elif chart_type == "bar" and text_fields:
+                        config["x_axis_suggestion"] = suggested_fields.get("x_axis", text_fields[0])
+                        config["y_axis_suggestion"] = suggested_fields.get("y_axis", numeric_fields[0] if numeric_fields else None)
+                    elif chart_type == "pie" and text_fields:
+                        config["label_field"] = suggested_fields.get("label", text_fields[0])
+                        config["value_field"] = suggested_fields.get("value", numeric_fields[0] if numeric_fields else None)
+                    elif chart_type == "scatter" and len(numeric_fields) >= 2:
+                        config["x_axis_suggestion"] = suggested_fields.get("x_axis", numeric_fields[0])
+                        config["y_axis_suggestion"] = suggested_fields.get("y_axis", numeric_fields[1])
+                
+                logger.info(f"Generated enhanced chart config: {chart_type} with {config['confidence']:.1%} confidence")
+                return config
+            
+            # Fallback to basic config if enhanced recommendations fail
+            logger.warning("Enhanced chart recommendations failed, using basic config")
+            return self._generate_chart_config(intent_analysis, query_results)
+            
+        except Exception as e:
+            logger.error(f"Failed to generate enhanced chart config: {e}")
+            # Fallback to basic chart config
+            return self._generate_chart_config(intent_analysis, query_results)
     
     async def process_message(
         self, 
